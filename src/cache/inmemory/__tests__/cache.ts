@@ -1345,7 +1345,7 @@ describe('Cache', () => {
       return { diffs, watch: options, cancel };
     }
 
-    it('calls onDirty for each invalidated watch', () => {
+    it('calls onWatchUpdated for each invalidated watch', () => {
       const cache = new InMemoryCache;
 
       const aQuery = gql`query { a }`;
@@ -1368,7 +1368,7 @@ describe('Cache', () => {
           });
         },
         optimistic: true,
-        onDirty(w, diff) {
+        onWatchUpdated(w, diff) {
           dirtied.set(w, diff);
         },
       });
@@ -1409,7 +1409,7 @@ describe('Cache', () => {
           });
         },
         optimistic: true,
-        onDirty(w, diff) {
+        onWatchUpdated(w, diff) {
           dirtied.set(w, diff);
         },
       });
@@ -1482,7 +1482,7 @@ describe('Cache', () => {
           });
         },
         optimistic: true,
-        onDirty(w, diff) {
+        onWatchUpdated(w, diff) {
           dirtied.set(w, diff);
         },
       });
@@ -1503,7 +1503,7 @@ describe('Cache', () => {
       bInfo.cancel();
     });
 
-    it('does not pass previously invalidated queries to onDirty', () => {
+    it('does not pass previously invalidated queries to onWatchUpdated', () => {
       const cache = new InMemoryCache;
 
       const aQuery = gql`query { a }`;
@@ -1524,13 +1524,13 @@ describe('Cache', () => {
 
       cache.writeQuery({
         query: bQuery,
-        // Writing this data with broadcast:false queues this update for the
-        // next broadcast, whenever it happens. If that next broadcast is the
-        // one triggered by cache.batch, the bQuery broadcast could be
-        // accidentally intercepted by onDirty, even though the transaction
-        // does not touch the Query.b field. To solve this problem, the batch
-        // method calls cache.broadcastWatches() before the transaction, when
-        // options.onDirty is provided.
+        // Writing this data with broadcast:false queues this update for
+        // the next broadcast, whenever it happens. If that next broadcast
+        // is the one triggered by cache.batch, the bQuery broadcast could
+        // be accidentally intercepted by onWatchUpdated, even though the
+        // transaction does not touch the Query.b field. To solve this
+        // problem, the batch method calls cache.broadcastWatches() before
+        // the transaction, when options.onWatchUpdated is provided.
         broadcast: false,
         data: {
           b: "beeeee",
@@ -1556,7 +1556,7 @@ describe('Cache', () => {
           });
         },
         optimistic: true,
-        onDirty(watch, diff) {
+        onWatchUpdated(watch, diff) {
           dirtied.set(watch, diff);
         },
       });
