@@ -3,6 +3,7 @@ import './fixPolyfills';
 
 import { DocumentNode } from 'graphql';
 import { wrap } from 'optimism';
+import { equal } from '@wry/equality';
 
 import { ApolloCache, BatchOptions } from '../core/cache';
 import { Cache } from '../core/types/Cache';
@@ -488,7 +489,7 @@ export class InMemoryCache extends ApolloCache<NormalizedCacheObject> {
       }
     }
 
-    if (!lastDiff || lastDiff.result !== diff.result) {
+    if (!lastDiff || !equal(lastDiff.result, diff.result)) {
       c.callback(c.lastDiff = diff, lastDiff);
     }
   }
