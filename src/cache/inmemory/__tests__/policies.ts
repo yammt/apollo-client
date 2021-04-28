@@ -1705,6 +1705,127 @@ describe("type policies", function () {
       expect(cache.extract()).toMatchSnapshot();
     });
 
+    describe("custom finalize functions", function () {
+      const makeCache = (resolve: () => void) => new InMemoryCache({
+        typePolicies: {
+          Parent: {
+            keyFields: false,
+            fields: {
+              deleteMe: {
+                read(existing, { storage }) {
+                  expect(existing).toBe("merged value");
+                  expect(storage.cached).toBe(existing);
+                  return "read value";
+                },
+                merge(existing, incoming, { storage }) {
+                  expect(existing).toBeUndefined();
+                  expect(incoming).toBe("initial value");
+                  return storage.cached = "merged value";
+                },
+                finalize(existing, { storage }) {
+                  expect(existing).toBe("merged value");
+                  expect(storage.cached).toBe(existing);
+                  delete storage.cached;
+                  // Finish the test (success).
+                  resolve();
+                },
+              },
+            },
+          },
+        },
+      });
+
+      const query = gql`
+        query {
+          parent {
+            deleteMe @client
+          }
+        }
+      `;
+
+      function testWriteAndRead(cache: InMemoryCache) {
+        cache.writeQuery({
+          query,
+          data: {
+            parent: {
+              __typename: "Parent",
+              deleteMe: "initial value",
+            },
+          },
+        });
+
+        expect(cache.extract()).toEqual({
+          ROOT_QUERY: {
+            __typename: "Query",
+            parent: {
+              __typename: "Parent",
+              deleteMe: "merged value",
+            },
+          },
+        });
+
+        expect(cache.readQuery({ query })).toEqual({
+          parent: {
+            __typename: "Parent",
+            deleteMe: "read value",
+          },
+        });
+      }
+
+      itAsync("are called when a parent object is evicted from the cache", resolve => {
+        const cache = makeCache(resolve);
+        testWriteAndRead(cache);
+
+        const evicted = cache.evict({
+          // Note that we're removing Query.parent, not directly removing
+          // Parent.deleteMe, but we still expect the Parent.deleteMe finalize
+          // function to be called.
+          fieldName: "parent",
+        });
+        expect(evicted).toBe(true);
+      });
+
+      itAsync("are called when cache.modify causes the parent object to lose fields", resolve => {
+        const cache = makeCache(resolve);
+        testWriteAndRead(cache);
+
+        const modified = cache.modify({
+          fields: {
+            parent(value: StoreObject) {
+              const { deleteMe, ...rest } = value;
+              expect(rest).toEqual({
+                __typename: "Parent",
+              });
+              return rest;
+            },
+          },
+        });
+        expect(modified).toBe(true);
+      });
+
+      itAsync("are called even if cache is cleared/restored", resolve => {
+        const cache = makeCache(resolve);
+        testWriteAndRead(cache);
+
+        const snapshot = cache.extract();
+        cache.reset();
+        expect(cache.extract()).toEqual({});
+        cache.restore(snapshot);
+        expect(cache.extract()).toEqual(snapshot);
+
+        cache.writeQuery({
+          query,
+          overwrite: true,
+          data: {
+            parent: {
+              __typename: "Parent",
+              deleteMe: void 0,
+            },
+          },
+        });
+      });
+    });
+
     it("merge functions can deduplicate items using readField", function () {
       const cache = new InMemoryCache({
         typePolicies: {
