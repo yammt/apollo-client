@@ -1824,6 +1824,104 @@ describe("type policies", function () {
           },
         });
       });
+
+      itAsync("are called if merge function returns undefined", resolve => {
+        const cache = new InMemoryCache({
+          typePolicies: {
+            ToDoList: {
+              keyFields: [],
+              fields: {
+                tasks: {
+                  keyArgs: false,
+
+                  merge(existing: number[] | undefined, incoming: number[], { args }) {
+                    if (args && args.deleteOnMerge) return;
+                    return existing ? [
+                      ...existing,
+                      ...incoming,
+                    ] : incoming;
+                  },
+
+                  finalize(existing) {
+                    expect(existing).toEqual([
+                      { __ref: 'Task:{"taskID":1}' },
+                      { __ref: 'Task:{"taskID":2}' },
+                      { __ref: 'Task:{"taskID":3}' },
+                      { __ref: 'Task:{"taskID":4}' },
+                    ]);
+                    // Finish the test (success).
+                    resolve();
+                  },
+                },
+              },
+            },
+
+            Task: {
+              keyFields: ["taskID"],
+            },
+          },
+        });
+
+        const query = gql`
+          query {
+            todoList {
+              tasks {
+                taskID
+                text
+              }
+            }
+          }
+        `;
+
+        cache.writeQuery({
+          query,
+          data: {
+            todoList: {
+              __typename: "ToDoList",
+              tasks: [
+                { __typename: "Task", taskID: 1, text: "task #1" },
+                { __typename: "Task", taskID: 2, text: "task #2" },
+              ],
+            },
+          },
+        });
+
+        expect(cache.extract()).toMatchSnapshot();
+
+        cache.writeQuery({
+          query,
+          data: {
+            todoList: {
+              __typename: "ToDoList",
+              tasks: [
+                { __typename: "Task", taskID: 3, text: "task #3" },
+                { __typename: "Task", taskID: 4, text: "task #4" },
+              ],
+            },
+          },
+        });
+
+        expect(cache.extract()).toMatchSnapshot();
+
+        cache.writeQuery({
+          query: gql`
+            query {
+              todoList {
+                tasks(deleteOnMerge: true) {
+                  taskID
+                  text
+                }
+              }
+            }
+          `,
+          data: {
+            todoList: {
+              __typename: "ToDoList",
+              tasks: [],
+            },
+          },
+        });
+      });
     });
 
     it("merge functions can deduplicate items using readField", function () {

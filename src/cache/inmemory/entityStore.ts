@@ -233,7 +233,19 @@ export abstract class EntityStore implements NormalizedCache {
         // restrict our attention to the incoming fields, since those are the
         // top-level fields that might have changed.
         Object.keys(incoming).forEach(storeFieldName => {
-          walk(existing[storeFieldName], incoming[storeFieldName]);
+          const eChild = existing[storeFieldName];
+          const iChild = incoming[storeFieldName];
+
+          walk(eChild, iChild);
+
+          if (iChild === void 0) {
+            this.policies.finalizeField(
+              existing.__typename,
+              existing,
+              storeFieldName,
+              context,
+            );
+          }
         });
       }
     }
@@ -608,12 +620,19 @@ class CacheGroup {
     }
   }
 
+  // This WeakMap maps every non-normalized object reference contained by the
+  // store to the path of that object within the enclosing entity object. This
+  // information is collected by the assignPaths method after every store.merge,
+  // so store.data should never contain any un-pathed objects. As a reminder,
+  // these object references are handled immutably from here on, so the objects
+  // should not move around in a way that invalidates these paths. This path
+  // information is useful in the getStorage method, below.
   private paths = new WeakMap<object, (string | number)[]>();
+
   public assignPaths(dataId: string, merged: StoreObject) {
     const paths = this.paths;
     const path: (string | number)[] = [dataId];
 
-    // TODO
     function assign(this: void, obj: StoreValue) {
       if (Array.isArray(obj)) {
         obj.forEach(handleChild);
